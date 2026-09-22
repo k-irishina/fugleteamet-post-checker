@@ -6,7 +6,7 @@ https://www.fugleteamet.no/adopsjon. It checks every 20 minutes between 08:00 an
 
 ## Tech
 
-Uses python with minimal dependencies and executes as a simple script. GitHub Actions runs act as the scheduler and execute the checking.
+Uses python with minimal dependencies and executes as a simple script. GitHub Actions runs act as the scheduler and execute the checking. Using Actions cache to store the reference bird list.
 
 ## How to get alerts
 
