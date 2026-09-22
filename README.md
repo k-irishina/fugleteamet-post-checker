@@ -12,7 +12,8 @@ Uses python with minimal dependencies and executes as a simple script. GitHub Ac
 
 1. In Telegram, find the bot **@fugleteamet_post_bot** and press **Start**.
 2. Send it the message: **please add me**
-3. Please notify me once you've done this. Once you've been added to the list, you'll get a message with a photo and link
+3. Please notify me once you've done this. When you've been added, the bot sends you a
+   "✅ You're now following…" message. After that, you'll get a message with a photo and link
    every time a new bird is posted.
 
 To stop getting alerts, block the bot or ask me to remove you.

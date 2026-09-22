@@ -80,15 +80,37 @@ def load_state():
         with open(STATE_FILE) as f:
             state = json.load(f)
     except FileNotFoundError:
-        return {"seen": None, "failing": False}
+        return {"seen": None, "failing": False, "welcomed": None}
     if isinstance(state, list):
         state = {"seen": state}
-    return {"seen": state.get("seen"), "failing": state.get("failing", False)}
+    return {"seen": state.get("seen"), "failing": state.get("failing", False), "welcomed": state.get("welcomed")}
 
 
 def save_state(state):
     with open(STATE_FILE, "w") as f:
-        json.dump({"seen": sorted(state["seen"] or []), "failing": state["failing"]}, f, indent=1)
+        json.dump({"seen": sorted(state["seen"] or []), "failing": state["failing"],
+                   "welcomed": sorted(state["welcomed"] or [])}, f, indent=1)
+
+
+def welcome_new_receivers(state):
+    """Send a one-time message to receivers that haven't had one yet to let them know the bot works."""
+    if state["seen"] is None:
+        state["welcomed"] = list(CHAT_IDS)
+        return
+    welcomed = set(state["welcomed"] or [])
+    for chat_id in CHAT_IDS:
+        if chat_id in welcomed:
+            continue
+        try:
+            telegram_sender("sendMessage", chat_id=chat_id,
+                            text=f"✅ You're now following new birds for adoption on {PAGE}\n"
+                                 "You'll get a message here when a new bird is posted "
+                                 "(checked every 20 minutes, 08–21).")
+            welcomed.add(chat_id)
+        except Exception as e:
+            print(f"could not welcome {chat_id}:", e, flush=True)
+    # Forget removed receivers, so they're welcomed again if re-added
+    state["welcomed"] = [c for c in welcomed if c in CHAT_IDS]
 
 
 def check_new_posts(state):
@@ -99,8 +121,6 @@ def check_new_posts(state):
         # First run: remember what's there now
         state["seen"] = list(listings)
         save_state(state)
-        telegram_sender("sendMessage", chat_id=ADMIN_CHAT_ID,
-           text=f"✅ Following {PAGE} ({len(listings)} listings). You will get notifications when new ones appear.")
         print(f"initialized with {len(listings)} listings", flush=True)
         return
     seen = set(state["seen"])
@@ -115,6 +135,7 @@ def check_new_posts(state):
 
 def run_check_once():
     state = load_state()
+    welcome_new_receivers(state)
     try:
         check_new_posts(state)
         if state["failing"]:
