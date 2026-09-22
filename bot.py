@@ -2,13 +2,14 @@
 """Watches https://www.fugleteamet.no/adopsjon and sends new listings to Telegram.
 
 Env:
-  TELEGRAM_TOKEN    bot token from @BotFather (required)
+  TELEGRAM_TOKEN    bot token from @BotFather
   TELEGRAM_CHAT_ID  comma-separated chat ids of receivers (run `python3 bot.py chatid` to find them).
                     Everyone gets new birds; only the first id gets error/status messages.
-  CHECK_INTERVAL    seconds between checks (default 1200 = 20 min)
-  STATE_FILE        where seen listings are stored (default ./seen.json)
+  GH_PAT             lets subscribers.yml update TELEGRAM_CHAT_ID
 
 """
+import hashlib
+import hmac
 import html
 import json
 import os
@@ -23,8 +24,12 @@ PAGE = BASE + "/adopsjon"
 TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 CHAT_IDS = [c.strip() for c in os.environ.get("TELEGRAM_CHAT_ID", "").split(",") if c.strip()]
 ADMIN_CHAT_ID = CHAT_IDS[0] if CHAT_IDS else ""
-INTERVAL = int(os.environ.get("CHECK_INTERVAL", "1200"))
-STATE_FILE = os.environ.get("STATE_FILE", "seen.json")
+INTERVAL = 1200
+STATE_FILE = "seen.json"
+CHAT_IDS_OUT = "chat_ids.txt"
+IN_GITHUB_ACTIONS = os.environ.get("GITHUB_ACTIONS") == "true"
+
+ADD_ME_RE = re.compile(r"\badd me\b", re.I)
 
 CARD_RE = re.compile(r'<div class="listing-card".*?Se hele annonsen</a>', re.S)
 
@@ -83,7 +88,10 @@ def load_state():
         return {"seen": None, "failing": False, "welcomed": None}
     if isinstance(state, list):
         state = {"seen": state}
-    return {"seen": state.get("seen"), "failing": state.get("failing", False), "welcomed": state.get("welcomed")}
+    welcomed = state.get("welcomed")
+    if welcomed is not None:  # older state files stored plain chat ids
+        welcomed = [id_hash(c) if re.fullmatch(r"-?\d+", c) else c for c in welcomed]
+    return {"seen": state.get("seen"), "failing": state.get("failing", False), "welcomed": welcomed}
 
 
 def save_state(state):
@@ -92,25 +100,31 @@ def save_state(state):
                    "welcomed": sorted(state["welcomed"] or [])}, f, indent=1)
 
 
+def id_hash(chat_id):
+    """Keyed with the bot token hash of a chat id, so we don't store plain chat ids"""
+    return hmac.new(TOKEN.encode(), chat_id.encode(), hashlib.sha256).hexdigest()[:32]
+
+
 def welcome_new_receivers(state):
     """Send a one-time message to receivers that haven't had one yet to let them know the bot works."""
+    current = {id_hash(c) for c in CHAT_IDS}
     if state["seen"] is None:
-        state["welcomed"] = list(CHAT_IDS)
+        state["welcomed"] = list(current)
         return
     welcomed = set(state["welcomed"] or [])
     for chat_id in CHAT_IDS:
-        if chat_id in welcomed:
+        if id_hash(chat_id) in welcomed:
             continue
         try:
             telegram_sender("sendMessage", chat_id=chat_id,
                             text=f"✅ You're now following new birds for adoption on {PAGE}\n"
                                  "You'll get a message here when a new bird is posted "
                                  "(checked every 20 minutes, 08–21).")
-            welcomed.add(chat_id)
+            welcomed.add(id_hash(chat_id))
         except Exception as e:
             print(f"could not welcome {chat_id}:", e, flush=True)
     # Forget removed receivers, so they're welcomed again if re-added
-    state["welcomed"] = [c for c in welcomed if c in CHAT_IDS]
+    state["welcomed"] = [h for h in welcomed if h in current]
 
 
 def check_new_posts(state):
@@ -164,6 +178,36 @@ def print_chat_id():
         print(f"{chat['id']}  {name}{user}: {m.get('text', '')!r}")
 
 
+def mask(value):
+    if IN_GITHUB_ACTIONS:
+        print(f"::add-mask::{value}", flush=True)
+
+
+def add_subscribers():
+    """Find people who messaged the bot "add me" and write to receiver list to CHAT_IDS_OUT and notify me"""
+    new = {}
+    for update in telegram_sender("getUpdates").get("result", []):
+        msg = update.get("message") or {}
+        chat = msg.get("chat") or {}
+        chat_id = str(chat.get("id", ""))
+        if chat.get("type") == "private" and ADD_ME_RE.search(msg.get("text") or "") and chat_id not in CHAT_IDS:
+            mask(chat_id)
+            name = " ".join(filter(None, [chat.get("first_name"), chat.get("last_name")]))
+            new[chat_id] = f"{name}" + (f" @{chat['username']}" if chat.get("username") else "") + f": {chat_id}"
+    print(f"{len(new)} new subscriber(s)", flush=True)
+    if not new:
+        return
+    with open(CHAT_IDS_OUT, "w") as f:
+        f.write(",".join(CHAT_IDS + list(new)))
+    try:
+        telegram_sender("sendMessage", chat_id=ADMIN_CHAT_ID,
+                        text="➕ Added to the receiver list (they get a welcome on the next check):\n"
+                             + "\n".join(new.values())
+                             + "\n\nFull list now in TELEGRAM_CHAT_ID:\n" + ",".join(CHAT_IDS + list(new)))
+    except Exception as e:
+        print("could not notify admin:", e, flush=True)
+
+
 def main():
     if not TOKEN:
         sys.exit("Set TELEGRAM_TOKEN")
@@ -172,6 +216,10 @@ def main():
         return print_chat_id()
     if not CHAT_IDS:
         sys.exit("Set TELEGRAM_CHAT_ID (run `python3 bot.py chatid` to find it)")
+    for chat_id in CHAT_IDS:
+        mask(chat_id)
+    if cmd == "subscribers":
+        return add_subscribers()
     if cmd == "once":
         return run_check_once()
     while True:
