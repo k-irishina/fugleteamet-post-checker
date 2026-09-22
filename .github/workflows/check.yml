@@ -1,0 +1,55 @@
+name: Check Fugleteamet posts
+
+on:
+  schedule:
+    # Every 20 min, offset to avoid busiest times.
+    # Cron is UTC: 06-19 UTC covers 08-21 Oslo in both summer (UTC+2) and winter (UTC+1);
+    # the check step skips the extra hour that falls outside 08-21 Oslo time.
+    - cron: "7,27,47 6-19 * * *"
+  workflow_dispatch: # "Run workflow" button for testing
+
+permissions:
+  contents: write
+
+concurrency:
+  group: check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check for new bird posts
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          STATE_FILE: seen.json
+        run: |
+          hour=$(TZ=Europe/Oslo date +%-H)
+          if [ "${{ github.event_name }}" = schedule ] && { [ "$hour" -lt 8 ] || [ "$hour" -ge 21 ]; }; then
+            echo "Night time in Oslo ($hour:xx), skipping."
+            exit 0
+          fi
+          python bot.py once
+
+      - name: Save state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add seen.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Update seen listings"
+          elif [ $(( $(date +%s) - $(git log -1 --format=%ct) )) -gt $((45*86400)) ]; then
+            # GitHub disables schedules after 60 days without repo activity.
+            git commit --allow-empty -m "Keepalive"
+          else
+            exit 0
+          fi
+          git push
