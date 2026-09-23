@@ -4,7 +4,7 @@ on:
   schedule:
     # Every 20 min, offset to avoid busiest times.
     # Cron is UTC
-    - cron: "7, 37 6-19 * * *"
+    - cron: "7,37 6-19 * * *"
   workflow_dispatch: # "Run workflow" button for testing
 
 permissions:
