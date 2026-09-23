@@ -1,7 +1,7 @@
 # Fugleteamet bird alert 🐦
 
 Sends a Telegram bot message whenever a new bird is posted for adoption on
-https://www.fugleteamet.no/adopsjon. It checks every 20 minutes between 08:00 and 21:00 Oslo time..
+https://www.fugleteamet.no/adopsjon. It checks twice a day, around 11:00 and 18:00 Oslo time (Github action scheduler is notoriously off-time).
   Made for myself to avoid checking the site all the time.
 
 ## Tech

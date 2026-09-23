@@ -2,9 +2,8 @@ name: Check Fugleteamet posts
 
 on:
   schedule:
-    # Every 20 min, offset to avoid busiest times.
-    # Cron is UTC
-    - cron: "7,37 6-19 * * *"
+    # Twice a day, at 7 past in attempt to avoid busiest times
+    - cron: "7 9,16 * * *"
   workflow_dispatch: # "Run workflow" button for testing
 
 permissions:
@@ -20,22 +19,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Time check
-        id: time
-        run: |
-          hour=$(TZ=Europe/Oslo date +%-H)
-          if [ "${{ github.event_name }}" = schedule ] && { [ "$hour" -lt 8 ] || [ "$hour" -ge 21 ]; }; then
-            echo "Night time in Oslo ($hour:xx), skipping."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/checkout@v7
-        if: steps.time.outputs.skip != 'true'
 
       # seen.json lives in the Actions cache
       # Each run saves a new entry, restore-keys picks the newest one
       - name: Restore seen birds
-        if: steps.time.outputs.skip != 'true'
         uses: actions/cache/restore@v6
         with:
           path: seen.json
@@ -43,14 +31,13 @@ jobs:
           restore-keys: seen-
 
       - name: Check for new bird posts
-        if: steps.time.outputs.skip != 'true'
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python3 bot.py once
 
       - name: Save seen birds
-        if: always() && steps.time.outputs.skip != 'true' && hashFiles('seen.json') != ''
+        if: always() && hashFiles('seen.json') != ''
         uses: actions/cache/save@v6
         with:
           path: seen.json
@@ -59,7 +46,6 @@ jobs:
       # GitHub pauses scheduled workflows in repos after 60 days without commits/activity
       # Re-enabling via API keeps it running without needing commits
       - name: Keepalive
-        if: steps.time.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

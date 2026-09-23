@@ -119,7 +119,7 @@ def welcome_new_receivers(state):
             telegram_sender("sendMessage", chat_id=chat_id,
                             text=f"✅ You're now following new birds for adoption on {PAGE}\n"
                                  "You'll get a message here when a new bird is posted "
-                                 "(checked every 20 minutes, 08–21).")
+                                 "(checked twice a day (around 11 and 18).")
             welcomed.add(id_hash(chat_id))
         except Exception as e:
             print(f"could not welcome {chat_id}:", e, flush=True)
