@@ -3,8 +3,7 @@ name: Check Fugleteamet posts
 on:
   schedule:
     # Every 20 min, offset to avoid busiest times.
-    # Cron is UTC: 06-19 UTC covers 08-21 Oslo in both summer (UTC+2) and winter (UTC+1);
-    # the time check below skips the extra hour that falls outside 08-21 Oslo time.
+    # Cron is UTC
     - cron: "7,27,47 6-19 * * *"
   workflow_dispatch: # "Run workflow" button for testing
 

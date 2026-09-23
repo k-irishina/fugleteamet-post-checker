@@ -2,7 +2,7 @@ name: Add subscribers
 
 on:
   schedule:
-    # Twice a day, 08:03 and 20:03 Oslo summer time / 07:03 and 19:03 winter time (cron is UTC).
+    # Twice a day, 08:03 and 20:03 Oslo summer time / 07:03 and 19:03 winter time (UTC cron)
     - cron: "3 6,18 * * *"
   workflow_dispatch: # "Run workflow" button
 
